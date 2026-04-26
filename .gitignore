@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.sqlite3
+
+# Django
+staticfiles/
+media/
+
+# Environment
+.env
+venv/
+.venv/
+
+# JWT RSA Keys - JANGAN DI-COMMIT
+jwt-signing.pem
+jwt-signing.pub
+*.pem
+
+# OS
+.DS_Store

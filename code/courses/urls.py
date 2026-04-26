@@ -1,9 +1,3 @@
-"""
-URL Configuration - courses app - Lab 05: Optimasi Database
-
-Semua endpoint lab menggunakan prefix /lab/ agar mudah diidentifikasi di Silk.
-"""
-
 from django.urls import path
 
 from . import views

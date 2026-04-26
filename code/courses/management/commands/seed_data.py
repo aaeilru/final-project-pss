@@ -151,7 +151,6 @@ class Command(BaseCommand):
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS('Seeding selesai! Sekarang coba:'))
         self.stdout.write('  http://localhost:8000/courses/          ← amati query di Silk')
-        self.stdout.write('  http://localhost:8000/silk/             ← dashboard profiling')
         self.stdout.write('  http://localhost:8000/admin/            ← manajemen data')
 
     # -------------------------------------------------------------------------
