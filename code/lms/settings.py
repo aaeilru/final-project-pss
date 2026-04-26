@@ -29,7 +29,7 @@ INSTALLED_APPS = [
 ]
 
 NINJA_JWT = {
-    "ACCESS_TOKEN_LIFETIME": 60 * 5,      # 5 menit
+    "ACCESS_TOKEN_LIFETIME": 60 * 60,      # 1 jam
     "REFRESH_TOKEN_LIFETIME": 60 * 60 * 24  # 1 hari
 }
 

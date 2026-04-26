@@ -32,7 +32,6 @@ class CourseMemberOut(Schema):
     id: int
     course_id: CourseOut
     roles: str
-    created_at: datetime
 
 
 class ContentTitleOut(Schema):
@@ -80,17 +79,3 @@ class CommentIn(Schema):
 
 class CommentUpdate(Schema):
     comment: str
-
-
-class UserUpdate(Schema):
-    first_name: str
-    last_name: str
-    email: str
-
-
-class ProgressIn(Schema):
-    content_id: int
-
-
-class MessageOut(Schema):
-    message: str
