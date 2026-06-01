@@ -93,6 +93,8 @@ class CourseContent(models.Model):
         null=True,
         blank=True
     )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
@@ -112,15 +114,15 @@ class Comment(models.Model):
         verbose_name="konten",
         on_delete=models.CASCADE
     )
-    member_id = models.ForeignKey(
-        CourseMember,
+    user_id = models.ForeignKey(
+        User,
         verbose_name="pengguna",
         on_delete=models.CASCADE
     )
     comment = models.TextField('komentar')
 
     def __str__(self):
-        return f"Komentar oleh {self.member_id} pada {self.content_id}"
+        return f"Komentar oleh {self.user_id} pada {self.content_id}"
 
     class Meta:
         verbose_name = "Komentar"

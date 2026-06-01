@@ -178,7 +178,7 @@ class Command(BaseCommand):
                     is_staff=False,
                     # make_password() diperlukan karena bulk_create tidak memanggil
                     # set_password() → password harus di-hash sebelum bulk_create
-                    password=make_password('password123'),
+                    password=make_password('password'),
                 ))
 
         if to_create:
@@ -208,7 +208,7 @@ class Command(BaseCommand):
                     first_name=random.choice(FIRST_NAMES),
                     last_name=random.choice(LAST_NAMES),
                     email=f'{username}@student.univ.ac.id',
-                    password=make_password('password123'),
+                    password=make_password('password'),
                 ))
 
         if to_create:

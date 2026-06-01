@@ -3,3 +3,9 @@ psycopg2-binary>=2.9,<3.0
 Pillow>=10.0,<11.0
 django-ninja==1.1
 django-ninja-simple-jwt
+django-redis
+redis
+pymongo
+celery>=5.3,<6.0
+kombu>=5.3,<6.0
+flower

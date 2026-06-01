@@ -22,10 +22,16 @@ class CourseOut(Schema):
     name: str
     description: str
     price: int
-    image: Optional[str] = ''
+    image: Optional[str] = None
     teacher: UserOut
     created_at: datetime
     updated_at: datetime
+
+    @staticmethod
+    def resolve_image(obj):
+        if obj.image:
+            return obj.image.name
+        return None
 
 
 class CourseMemberOut(Schema):
@@ -72,6 +78,12 @@ class Register(Schema):
     last_name: str
 
 
+class UserUpdate(Schema):
+    first_name: str
+    last_name: str
+    email: str
+
+
 class CommentIn(Schema):
     comment: str
     content_id: int
@@ -79,3 +91,11 @@ class CommentIn(Schema):
 
 class CommentUpdate(Schema):
     comment: str
+
+
+class ProgressIn(Schema):
+    content_id: int
+
+
+class MessageOut(Schema):
+    message: str

@@ -22,6 +22,14 @@ from core.schemas import (
     MessageOut,
 )
 
+from django.core.cache import cache
+from ninja.errors import HttpError
+from analytics.mongo_service import log_activity
+from courses.tasks import send_enrollment_email, generate_certificate, update_course_statistics, export_course_report
+from analytics.mongo_service import report_activity_by_action, report_activity_by_course
+from core.rate_limit import rate_limit
+
+
 # INIT API
 apiv1 = NinjaAPI(
     title="Simple LMS API",
@@ -88,32 +96,78 @@ def my_courses(request):
     ).select_related("course_id", "user_id")
 
 
-@apiv1.get("/courses/", response=List[CourseOut])
+@apiv1.get("/courses/", response=list, tags=["Courses"])
 def listCourses(request):
-    return Course.objects.select_related("teacher").all()
+    rate_limit(request)
+    cache_key = "courses_list"
+
+    cached_data = cache.get(cache_key)
+    if cached_data is not None:
+        return cached_data
+
+    courses = []
+
+    for course in Course.objects.select_related("teacher").all():
+        courses.append({
+            "id": course.id,
+            "name": course.name,
+            "description": course.description,
+            "price": course.price,
+            "teacher": course.teacher.username,
+        })
+
+    cache.set(cache_key, courses, timeout=300)
+
+    return courses
 
 
-@apiv1.get("/courses/{id}", response=DetailCourseOut)
+@apiv1.get("/courses/{id}", response=dict, tags=["Courses"])
 def detailCourse(request, id: int):
-    course = Course.objects.filter(id=id)\
-        .prefetch_related("coursecontent_set")\
-        .select_related("teacher")\
-        .first()
+    rate_limit(request)
+    cache_key = f"course_detail:{id}"
+
+    cached_data = cache.get(cache_key)
+    if cached_data is not None:
+        return cached_data
+
+    course = Course.objects.filter(id=id).select_related("teacher").first()
 
     if not course:
         raise HttpError(404, "Course tidak ditemukan")
 
-    return course
+    data = {
+        "id": course.id,
+        "name": course.name,
+        "description": course.description,
+        "price": course.price,
+        "teacher": course.teacher.username,
+    }
+
+    cache.set(cache_key, data, timeout=300)
+
+    return data
 
 
 @apiv1.post("/courses/", auth=apiAuth, response={201: CourseOut})
 def createCourse(request, data: CourseIn):
+
     if data.price < 0:
         raise HttpError(400, "Harga tidak boleh negatif")
 
+    teacher = User.objects.get(id=request.user.id)
+
     course = Course.objects.create(
         **data.dict(),
-        teacher=request.user
+        teacher=teacher
+    )
+
+    cache.delete("courses_list")
+
+    log_activity(
+        user_id=request.user.id,
+        action="create_course",
+        course_id=course.id,
+        course_name=course.name
     )
 
     return 201, course
@@ -121,18 +175,38 @@ def createCourse(request, data: CourseIn):
 
 @apiv1.put("/courses/{id}", auth=apiAuth, response=CourseOut)
 def updateCourse(request, id: int, data: CourseIn):
+    if data.price < 0:
+        raise HttpError(400, "Harga tidak boleh negatif")
+
     course = Course.objects.filter(id=id).first()
 
     if not course:
         raise HttpError(404, "Course tidak ditemukan")
 
-    if course.teacher != request.user:
+    if course.teacher.id != request.user.id:
         raise HttpError(403, "Bukan pemilik course")
 
     for key, value in data.dict().items():
         setattr(course, key, value)
 
     course.save()
+
+    # Cache invalidation
+    cache.delete("courses_list")
+    cache.delete(f"course_detail:{id}")
+
+    # MongoDB activity log
+    log_activity(
+        user_id=request.user.id,
+        action="update_course",
+        course_id=course.id,
+        course_name=course.name,
+        metadata={
+            "price": course.price,
+            "teacher": request.user.username
+        }
+    )
+
     return course
 
 
@@ -143,30 +217,68 @@ def deleteCourse(request, id: int):
     if not course:
         raise HttpError(404, "Course tidak ditemukan")
 
-    if course.teacher != request.user and not request.user.is_superuser:
+    if course.teacher.id != request.user.id and not request.user.is_superuser:
         raise HttpError(403, "Tidak punya akses")
 
+    course_id = course.id
+    course_name = course.name
+
     course.delete()
+
+    # Cache invalidation
+    cache.delete("courses_list")
+    cache.delete(f"course_detail:{id}")
+
+    # MongoDB activity log
+    log_activity(
+        user_id=request.user.id,
+        action="delete_course",
+        course_id=course_id,
+        course_name=course_name,
+        metadata={
+            "deleted_by": request.user.username
+        }
+    )
+
     return {"message": "Course berhasil dihapus"}
 
 
 # ================= ENROLL =================
 
-@apiv1.post("/course/{id}/enroll/", auth=apiAuth, response=CourseMemberOut)
+@apiv1.post("/course/{id}/enroll/", auth=apiAuth, response=MessageOut)
 def enroll(request, id: int):
+    if not request.user or not getattr(request.user, "id", None):
+        raise HttpError(401, "Silakan login terlebih dahulu")
+
+    try:
+        user = User.objects.get(id=request.user.id)
+    except User.DoesNotExist:
+        raise HttpError(401, "User tidak ditemukan. Silakan login ulang.")
+
     course = Course.objects.filter(id=id).first()
 
     if not course:
         raise HttpError(404, "Course tidak ditemukan")
 
-    if CourseMember.objects.filter(user_id=request.user, course_id=course).exists():
+    if CourseMember.objects.filter(user_id=user, course_id=course).exists():
         raise HttpError(400, "Sudah enroll")
 
-    return CourseMember.objects.create(
-        user_id=request.user,
+    CourseMember.objects.create(
+        user_id=user,
         course_id=course,
         roles="std"
     )
+
+    log_activity(
+        user_id=user.id,
+        action="enroll",
+        course_id=course.id,
+        course_name=course.name
+    )
+
+    send_enrollment_email.delay(user.id, course.id)
+
+    return {"message": "Berhasil enroll course"}
 
 
 @apiv1.post("/enrollments/{id}/progress/", auth=apiAuth, response=MessageOut)
@@ -240,3 +352,28 @@ def deleteComment(request, id: int):
         return {"message": "Komentar dihapus"}
 
     raise HttpError(403, "Tidak punya akses")
+
+@apiv1.get("/analytics/activity-by-action/", auth=apiAuth, tags=["Analytics"])
+def activity_by_action(request):
+    if not request.user.is_superuser:
+        raise HttpError(403, "Admin only")
+
+    data = report_activity_by_action()
+
+    for item in data:
+        item["_id"] = str(item["_id"])
+
+    return data
+
+
+@apiv1.get("/analytics/activity-by-course/", auth=apiAuth, tags=["Analytics"])
+def activity_by_course(request):
+    if not request.user.is_superuser:
+        raise HttpError(403, "Admin only")
+
+    data = report_activity_by_course()
+
+    for item in data:
+        item["_id"] = str(item["_id"])
+
+    return data

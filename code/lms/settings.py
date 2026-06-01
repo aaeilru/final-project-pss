@@ -1,9 +1,14 @@
 from pathlib import Path
+import os
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: jangan gunakan key ini di production!
-SECRET_KEY = "django-insecure-lab05-db-optimization-simple-lms-key-2025"
+SECRET_KEY = os.environ.get(
+    "SECRET_KEY",
+    "django-insecure-simple-lms-local-development-key"
+)
 
 # SECURITY WARNING: matikan DEBUG di production!
 DEBUG = True
@@ -26,11 +31,15 @@ INSTALLED_APPS = [
     'ninja_simple_jwt',
     # Local apps
     'courses',
+    'analytics',
 ]
 
 NINJA_JWT = {
-    "ACCESS_TOKEN_LIFETIME": 60 * 60,      # 1 jam
-    "REFRESH_TOKEN_LIFETIME": 60 * 60 * 24  # 1 hari
+    "ACCESS_TOKEN_LIFETIME": 60 * 60,       # 1 jam
+    "REFRESH_TOKEN_LIFETIME": 60 * 60 * 24, # 1 hari
+    "ALGORITHM": "RS256",
+    "SIGNING_KEY": open(BASE_DIR / "jwt-signing.pem").read(),
+    "VERIFYING_KEY": open(BASE_DIR / "jwt-signing.pub").read(),
 }
 
 
@@ -78,10 +87,10 @@ WSGI_APPLICATION = "lms.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "lms_db",
+        "NAME": "simple_lms",
         "USER": "postgres",
         "PASSWORD": "postgres",
-        "HOST": "database",  # Nama service di docker-compose.yml
+        "HOST": "db",  # Nama service di docker-compose.yml
         "PORT": "5432",
     }
 }
@@ -120,3 +129,43 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Redis Cache
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": os.environ.get("REDIS_URL", "redis://redis:6379/1"),
+        "TIMEOUT": 300,
+    }
+}
+
+# Celery
+CELERY_BROKER_URL = os.environ.get(
+    "CELERY_BROKER_URL",
+    "amqp://admin:password@rabbitmq:5672//"
+)
+
+CELERY_RESULT_BACKEND = os.environ.get(
+    "CELERY_RESULT_BACKEND",
+    "redis://redis:6379/2"
+)
+
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "Asia/Jakarta"
+
+CELERY_BEAT_SCHEDULE = {
+    "update-course-statistics-every-5-minutes": {
+        "task": "courses.tasks.update_course_statistics",
+        "schedule": 300.0,
+    },
+}
+
+# MongoDB
+MONGO_URI = os.environ.get(
+    "MONGO_URI",
+    "mongodb://admin:password@mongodb:27017/?authSource=admin"
+)
+
+MONGO_DB_NAME = "lms_analytics"

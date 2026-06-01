@@ -25,5 +25,6 @@ class CourseContentAdmin(admin.ModelAdmin):
 
 @admin.register(Comment)
 class CommentAdmin(admin.ModelAdmin):
-    list_display = ('content_id', 'member_id', 'comment')
+    list_display = ('id', 'content_id', 'user_id', 'comment')
     list_filter = ('content_id',)
+    search_fields = ('comment',)

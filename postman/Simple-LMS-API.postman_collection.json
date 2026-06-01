@@ -60,7 +60,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"mahasiswa01\",\n  \"password\": \"password123\",\n  \"email\": \"mahasiswa01@example.com\",\n  \"first_name\": \"Budi\",\n  \"last_name\": \"Santoso\"\n}"
+              "raw": "{\n  \"username\": \"mahasiswa01\",\n  \"password\": \"password\",\n  \"email\": \"mahasiswa01@example.com\",\n  \"first_name\": \"Budi\",\n  \"last_name\": \"Santoso\"\n}"
             }
           },
           "response": []
@@ -87,7 +87,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"mahasiswa01\",\n  \"password\": \"password123\"\n}"
+              "raw": "{\n  \"username\": \"mahasiswa01\",\n  \"password\": \"password\"\n}"
             }
           },
           "response": [],
