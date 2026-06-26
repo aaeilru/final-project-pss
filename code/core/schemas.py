@@ -11,10 +11,31 @@ class UserOut(Schema):
     email: str
 
 
+class UserRoleOut(Schema):
+    id: int
+    username: str
+    email: str
+    is_superuser: bool
+    role: str
+
+
+class CategoryIn(Schema):
+    name: str
+    description: str = '-'
+
+
+class CategoryOut(Schema):
+    id: int
+    name: str
+    slug: str
+    description: str
+
+
 class CourseIn(Schema):
     name: str
     description: str = '-'
     price: int = 10000
+    category_id: Optional[int] = None
 
 
 class CourseOut(Schema):
@@ -23,6 +44,7 @@ class CourseOut(Schema):
     description: str
     price: int
     image: Optional[str] = None
+    category: Optional[CategoryOut] = None
     teacher: UserOut
     created_at: datetime
     updated_at: datetime
@@ -76,12 +98,17 @@ class Register(Schema):
     email: str
     first_name: str
     last_name: str
+    role: str = "student"  # hanya "student" atau "instructor", admin tidak boleh daftar sendiri
 
 
 class UserUpdate(Schema):
     first_name: str
     last_name: str
     email: str
+
+
+class RoleUpdate(Schema):
+    role: str  # "student" atau "instructor"
 
 
 class CommentIn(Schema):
@@ -97,5 +124,43 @@ class ProgressIn(Schema):
     content_id: int
 
 
+class ProgressOut(Schema):
+    message: str
+    progress_percentage: float
+    completed: bool
+
+
 class MessageOut(Schema):
     message: str
+
+
+class TaskTriggerOut(Schema):
+    message: str
+    task_id: str
+
+
+class TaskStatusOut(Schema):
+    task_id: str
+    status: str
+    result: Optional[str] = None
+
+
+class CertificateOut(Schema):
+    id: int
+    code: str
+    course_id: int
+    course_name: str = None
+    issued_at: datetime
+
+    @staticmethod
+    def resolve_course_name(obj):
+        return obj.course.name
+
+
+class CourseReportOut(Schema):
+    course_id: int
+    course_name: str
+    enrollment_count: int
+    completed_count: int
+    completion_rate: float
+    updated_at: Optional[datetime] = None

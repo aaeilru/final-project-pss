@@ -9,3 +9,5 @@ pymongo
 celery>=5.3,<6.0
 kombu>=5.3,<6.0
 flower
+python-dotenv
+mongomock

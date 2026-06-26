@@ -1,19 +1,32 @@
 from pathlib import Path
 import os
 
+try:
+    # Memuat .env secara otomatis saat manage.py dijalankan LANGSUNG (di luar
+    # Docker). Di dalam Docker, environment sudah disuplai oleh docker-compose
+    # lewat env_file, jadi baris ini hanya berguna untuk pengembangan lokal.
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY WARNING: jangan gunakan key ini di production!
+# =============================================================================
+# Security
+# =============================================================================
+# SECURITY WARNING: SECRET_KEY HARUS diisi lewat environment variable di
+# production. Fallback di bawah hanya untuk kenyamanan development lokal.
 SECRET_KEY = os.environ.get(
     "SECRET_KEY",
     "django-insecure-simple-lms-local-development-key"
 )
 
 # SECURITY WARNING: matikan DEBUG di production!
-DEBUG = True
+DEBUG = os.environ.get("DEBUG", "True") == "True"
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
 
 
 # =============================================================================
@@ -34,12 +47,25 @@ INSTALLED_APPS = [
     'analytics',
 ]
 
+
+def _read_key_file(path: Path):
+    """
+    Baca file RSA key untuk JWT. Mengembalikan None jika file belum ada
+    (misalnya sebelum `python manage.py make_jwt_key` dijalankan), sehingga
+    Django settings tetap bisa di-import tanpa crash.
+    """
+    try:
+        return path.read_text()
+    except FileNotFoundError:
+        return None
+
+
 NINJA_JWT = {
     "ACCESS_TOKEN_LIFETIME": 60 * 60,       # 1 jam
-    "REFRESH_TOKEN_LIFETIME": 60 * 60 * 24, # 1 hari
+    "REFRESH_TOKEN_LIFETIME": 60 * 60 * 24,  # 1 hari
     "ALGORITHM": "RS256",
-    "SIGNING_KEY": open(BASE_DIR / "jwt-signing.pem").read(),
-    "VERIFYING_KEY": open(BASE_DIR / "jwt-signing.pub").read(),
+    "SIGNING_KEY": _read_key_file(BASE_DIR / "jwt-signing.pem"),
+    "VERIFYING_KEY": _read_key_file(BASE_DIR / "jwt-signing.pub"),
 }
 
 
@@ -81,20 +107,18 @@ WSGI_APPLICATION = "lms.wsgi.application"
 # =============================================================================
 # Database - PostgreSQL (sesuai docker-compose.yml)
 # =============================================================================
-# Berbeda dengan Lab-compliance yang menggunakan SQLite,
-# lab ini menggunakan PostgreSQL agar optimasi index terlihat nyata.
+# Semua kredensial dibaca dari environment variable. Lihat .env.example.
 
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "simple_lms",
-        "USER": "postgres",
-        "PASSWORD": "postgres",
-        "HOST": "db",  # Nama service di docker-compose.yml
-        "PORT": "5432",
+        "NAME": os.environ.get("POSTGRES_DB", "simple_lms"),
+        "USER": os.environ.get("POSTGRES_USER", "postgres"),
+        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "postgres"),
+        "HOST": os.environ.get("POSTGRES_HOST", "db"),
+        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
     }
 }
-
 
 
 # =============================================================================
@@ -130,7 +154,10 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# =============================================================================
 # Redis Cache
+# =============================================================================
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
@@ -139,10 +166,13 @@ CACHES = {
     }
 }
 
+# =============================================================================
 # Celery
+# =============================================================================
+
 CELERY_BROKER_URL = os.environ.get(
     "CELERY_BROKER_URL",
-    "amqp://admin:password@rabbitmq:5672//"
+    "amqp://guest:guest@rabbitmq:5672//"
 )
 
 CELERY_RESULT_BACKEND = os.environ.get(
@@ -154,6 +184,7 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "Asia/Jakarta"
+CELERY_TASK_STORE_EAGER_RESULT = True
 
 CELERY_BEAT_SCHEDULE = {
     "update-course-statistics-every-5-minutes": {
@@ -162,10 +193,35 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
+# =============================================================================
 # MongoDB
+# =============================================================================
+
 MONGO_URI = os.environ.get(
     "MONGO_URI",
-    "mongodb://admin:password@mongodb:27017/?authSource=admin"
+    "mongodb://mongo:mongo@mongodb:27017/?authSource=admin"
 )
 
-MONGO_DB_NAME = "lms_analytics"
+MONGO_DB_NAME = os.environ.get("MONGO_DB_NAME", "lms_analytics")
+
+
+# =============================================================================
+# Logging (supaya warning dari analytics/mongo_service.py terlihat di console)
+# =============================================================================
+
+EMAIL_BACKEND = os.environ.get(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend"
+)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+}
