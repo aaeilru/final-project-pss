@@ -111,17 +111,17 @@ Project ini punya 3 role: **admin**, **instructor**, **student**.
 - **instructor** dan **student** disimpan di model `Profile.role`, dan ditentukan saat registrasi lewat field `role` (default `student`).
 - Endpoint `/admin/users/` dan `/admin/users/{id}/role/` (admin only) bisa dipakai untuk mempromosikan seorang student menjadi instructor.
 
-| Aksi                                                 | Student            | Instructor    | Admin    |
-| ---------------------------------------------------- | ------------------ | ------------- | -------- |
-| Lihat/cari course (`GET /courses/`)                  | ✅                 | ✅            | ✅       |
-| Buat course (`POST /courses/`)                       | ❌                 | ✅            | ✅       |
-| Edit/hapus course                                    | hanya pemilik      | hanya pemilik | ✅ semua |
-| Enroll course                                        | ✅                 | ✅            | ✅       |
-| Tandai progress lesson                               | ✅ (punya sendiri) | -             | -        |
-| Buat kategori                                        | ❌                 | ✅            | ✅       |
-| Lihat analytics MongoDB                              | ❌                 | ❌            | ✅       |
-| Trigger admin task (export report, update statistik) | ❌                 | ❌            | ✅       |
-| Kelola role user lain                                | ❌                 | ❌            | ✅       |
+| Aksi                                                 | Student | Instructor    | Admin    |
+| ---------------------------------------------------- | ------- | ------------- | -------- |
+| Lihat/cari course (`GET /courses/`)                  | ✅      | ✅            | ✅       |
+| Buat course (`POST /courses/`)                       | ❌      | ✅            | ✅       |
+| Edit/hapus course                                    | ❌      | hanya pemilik | ✅ semua |
+| Enroll course                                        | ✅      | ✅            | ✅       |
+| Tandai progress lesson                               | ✅      | -             | -        |
+| Buat kategori                                        | ❌      | ✅            | ✅       |
+| Lihat analytics MongoDB                              | ❌      | ❌            | ✅       |
+| Trigger admin task (export report, update statistik) | ❌      | ❌            | ✅       |
+| Kelola role user lain                                | ❌      | ❌            | ✅       |
 
 ---
 
@@ -993,17 +993,9 @@ akan mencatat warning di log tapi **tidak menggagalkan request utama** —
 ini sengaja didesain demikian (graceful degradation) agar API tetap bisa
 diuji walau MongoDB belum siap.
 
-**Catatan penting soal Celery saat testing**: Celery membaca
-`CELERY_BROKER_URL` dan `CELERY_RESULT_BACKEND` langsung dari
-`os.environ` jika ada di sana — ini PRIORITAS LEBIH TINGGI daripada
-apapun yang diset di `settings.py`/`settings_test.py` sebagai variabel
-Django biasa. Karena `settings.py` memanggil `load_dotenv()` (membaca file
-`.env` yang isinya konfigurasi untuk Docker), variabel itu "bocor" ke
-`os.environ` proses Python. `lms/settings_test.py` sudah menangani ini
-dengan `os.environ.pop("CELERY_BROKER_URL", None)` dan
-`os.environ.pop("CELERY_RESULT_BACKEND", None)` di baris paling atas —
-JANGAN dihapus, atau test yang memicu Celery task akan gagal connect ke
-Redis Docker (`redis:6379`) saat dijalankan di luar Docker.
+**Catatan penting soal Celery saat testing**: Saat menjalankan test di luar Docker, konfigurasi Celery diarahkan menggunakan broker dan backend in-memory agar tidak bergantung pada RabbitMQ atau Redis container. Oleh karena itu, settings_test.py menghapus sementara environment variable Celery dari .env Docker dan menggantinya dengan konfigurasi testing lokal.
+
+Konfigurasi ini penting agar task Celery seperti email notification, export report, dan update statistics tetap dapat diuji secara synchronous tanpa mencoba koneksi ke hostname Docker seperti redis:6379.
 
 ---
 

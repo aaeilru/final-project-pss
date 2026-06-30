@@ -71,7 +71,7 @@ def update_course_statistics():
     Celery Beat task (jalan otomatis tiap 5 menit, lihat CELERY_BEAT_SCHEDULE
     di settings.py). Menghitung ulang enrollment_count, completed_count, dan
     completion_rate untuk SETIAP course, lalu menyimpannya ke tabel
-    CourseStatistics -- supaya endpoint laporan (Paket 5: Course analytics
+    CourseStatistics -- supaya endpoint laporan: Course analytics
     report) tinggal baca data yang sudah dihitung, tanpa query berat
     setiap kali ada request.
     """

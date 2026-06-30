@@ -25,6 +25,8 @@ from core.schemas import (
     CourseOut,
     DetailCourseOut,
     CourseMemberOut,
+    CourseContentIn,
+    CourseContentOut,
     CommentIn,
     CommentUpdate,
     ProgressIn,
@@ -67,7 +69,7 @@ apiAuth = HttpJwtAuth()
 
 # ================= AUTH =================
 
-@apiv1.post("/register/", response={201: UserOut})
+@apiv1.post("/register/", response={201: UserOut}, tags=["Authentication"])
 def register(request, data: Register):
     if User.objects.filter(username=data.username).exists():
         raise HttpError(400, "Username sudah digunakan")
@@ -85,12 +87,12 @@ def register(request, data: Register):
     return 201, user
 
 
-@apiv1.get("/profile/", auth=apiAuth, response=UserOut)
+@apiv1.get("/profile/", auth=apiAuth, response=UserOut, tags=["Authentication"])
 def profile(request):
     return request.user
 
 
-@apiv1.put("/profile/", auth=apiAuth, response=UserOut)
+@apiv1.put("/profile/", auth=apiAuth, response=UserOut, tags=["Authentication"])
 def update_profile(request, data: UserUpdate):
     # request.user bisa berupa TokenUser stateless (tidak punya .save()),
     # jadi harus diambil ulang sebagai User asli dari database.
@@ -107,12 +109,12 @@ def update_profile(request, data: UserUpdate):
     return user
 
 
-@apiv1.get("/auth/me/", auth=apiAuth, response=UserOut)
+@apiv1.get("/auth/me/", auth=apiAuth, response=UserOut, tags=["Authentication"])
 def auth_me(request):
     return request.user
 
 
-@apiv1.put("/auth/me/", auth=apiAuth, response=UserOut)
+@apiv1.put("/auth/me/", auth=apiAuth, response=UserOut, tags=["Authentication"])
 def auth_update_me(request, data: UserUpdate):
     user = User.objects.get(id=request.user.id)
 
@@ -179,7 +181,7 @@ def create_category(request, data: CategoryIn):
 
 # ================= COURSE =================
 
-@apiv1.get("/enrollments/my-courses/", auth=apiAuth, response=List[CourseMemberOut])
+@apiv1.get("/enrollments/my-courses/", auth=apiAuth, response=List[CourseMemberOut], tags=["Enrollment"])
 def my_courses(request):
     return CourseMember.objects.filter(
         user_id=request.user
@@ -251,13 +253,19 @@ def detailCourse(request, id: int):
     return data
 
 
-@apiv1.post("/courses/", auth=apiAuth, response={201: CourseOut})
+@apiv1.post("/courses/", auth=apiAuth, response={201: CourseOut}, tags=["Courses"])
 def createCourse(request, data: CourseIn):
     # Hanya instructor atau admin yang boleh membuat course.
     require_role(request.user, ["admin", "instructor"])
 
     if data.price < 0:
         raise HttpError(400, "Harga tidak boleh negatif")
+
+    # Swagger UI sering ngisi default "0" untuk field integer opsional yang
+    # dikosongkan. ID asli di database mulai dari 1, jadi 0 dianggap "tidak
+    # pilih kategori" -- bukan dianggap error.
+    if not data.category_id:
+        data.category_id = None
 
     if data.category_id is not None and not Category.objects.filter(id=data.category_id).exists():
         raise HttpError(400, "Kategori tidak ditemukan")
@@ -281,7 +289,7 @@ def createCourse(request, data: CourseIn):
     return 201, course
 
 
-@apiv1.put("/courses/{id}", auth=apiAuth, response=CourseOut)
+@apiv1.put("/courses/{id}", auth=apiAuth, response=CourseOut, tags=["Courses"])
 def updateCourse(request, id: int, data: CourseIn):
     if data.price < 0:
         raise HttpError(400, "Harga tidak boleh negatif")
@@ -293,6 +301,10 @@ def updateCourse(request, id: int, data: CourseIn):
 
     if course.teacher.id != request.user.id and not request.user.is_superuser:
         raise HttpError(403, "Bukan pemilik course")
+
+    # Sama seperti createCourse: 0 dianggap "tidak pilih kategori".
+    if not data.category_id:
+        data.category_id = None
 
     if data.category_id is not None and not Category.objects.filter(id=data.category_id).exists():
         raise HttpError(400, "Kategori tidak ditemukan")
@@ -321,7 +333,7 @@ def updateCourse(request, id: int, data: CourseIn):
     return course
 
 
-@apiv1.delete("/courses/{id}", auth=apiAuth)
+@apiv1.delete("/courses/{id}", auth=apiAuth, tags=["Courses"])
 def deleteCourse(request, id: int):
     course = Course.objects.filter(id=id).first()
 
@@ -354,9 +366,111 @@ def deleteCourse(request, id: int):
     return {"message": "Course berhasil dihapus"}
 
 
+# ================= COURSE CONTENT (Lesson) =================
+
+@apiv1.get("/courses/{course_id}/contents/", response=List[CourseContentOut], tags=["Course Content"])
+def list_course_contents(request, course_id: int):
+    """Daftar lesson/konten sebuah course. Publik, gak perlu login (sama seperti list course)."""
+    course = Course.objects.filter(id=course_id).first()
+    if not course:
+        raise HttpError(404, "Course tidak ditemukan")
+
+    return CourseContent.objects.filter(course_id=course).order_by("id")
+
+
+@apiv1.post("/contents/", auth=apiAuth, response={201: CourseContentOut}, tags=["Course Content"])
+def create_course_content(request, data: CourseContentIn):
+    """Tambah lesson baru ke sebuah course. Hanya pemilik course (instructor) atau admin."""
+    # Swagger UI sering ngisi default "0" untuk field integer opsional yang
+    # dikosongkan. ID asli mulai dari 1, jadi 0 dianggap "tidak ada parent".
+    if not data.parent_id:
+        data.parent_id = None
+
+    course = Course.objects.filter(id=data.course_id).first()
+    if not course:
+        raise HttpError(404, "Course tidak ditemukan")
+
+    if course.teacher.id != request.user.id and not request.user.is_superuser:
+        raise HttpError(403, "Hanya pemilik course yang bisa menambah lesson")
+
+    parent = None
+    if data.parent_id is not None:
+        parent = CourseContent.objects.filter(id=data.parent_id, course_id=course).first()
+        if not parent:
+            raise HttpError(400, "Parent lesson tidak ditemukan di course ini")
+
+    # course_id & parent_id adalah nama RELASI ForeignKey (bukan kolom
+    # mentah) -- harus diisi instance Course/CourseContent asli, bukan
+    # int mentah dari data.dict(), makanya tidak pakai **data.dict() di sini.
+    content = CourseContent.objects.create(
+        name=data.name,
+        description=data.description,
+        video_url=data.video_url,
+        course_id=course,
+        parent_id=parent,
+    )
+
+    log_activity(
+        user_id=request.user.id,
+        action="create_content",
+        course_id=course.id,
+        course_name=course.name,
+        metadata={"content_name": content.name},
+    )
+
+    return 201, content
+
+
+@apiv1.put("/contents/{id}", auth=apiAuth, response=CourseContentOut, tags=["Course Content"])
+def update_course_content(request, id: int, data: CourseContentIn):
+    if not data.parent_id:
+        data.parent_id = None
+
+    content = CourseContent.objects.filter(id=id).select_related("course_id").first()
+    if not content:
+        raise HttpError(404, "Lesson tidak ditemukan")
+
+    if content.course_id.teacher.id != request.user.id and not request.user.is_superuser:
+        raise HttpError(403, "Hanya pemilik course yang bisa mengubah lesson")
+
+    new_course = Course.objects.filter(id=data.course_id).first()
+    if not new_course:
+        raise HttpError(400, "Course tidak ditemukan")
+    if new_course.teacher.id != request.user.id and not request.user.is_superuser:
+        raise HttpError(403, "Tidak bisa memindahkan lesson ke course milik orang lain")
+
+    new_parent = None
+    if data.parent_id is not None:
+        new_parent = CourseContent.objects.filter(id=data.parent_id, course_id=new_course).first()
+        if not new_parent:
+            raise HttpError(400, "Parent lesson tidak ditemukan di course ini")
+
+    content.name = data.name
+    content.description = data.description
+    content.video_url = data.video_url
+    content.course_id = new_course
+    content.parent_id = new_parent
+    content.save()
+
+    return content
+
+
+@apiv1.delete("/contents/{id}", auth=apiAuth, tags=["Course Content"])
+def delete_course_content(request, id: int):
+    content = CourseContent.objects.filter(id=id).select_related("course_id").first()
+    if not content:
+        raise HttpError(404, "Lesson tidak ditemukan")
+
+    if content.course_id.teacher.id != request.user.id and not request.user.is_superuser:
+        raise HttpError(403, "Hanya pemilik course yang bisa menghapus lesson")
+
+    content.delete()
+    return {"message": "Lesson berhasil dihapus"}
+
+
 # ================= ENROLL =================
 
-@apiv1.post("/course/{id}/enroll/", auth=apiAuth, response=MessageOut)
+@apiv1.post("/course/{id}/enroll/", auth=apiAuth, response=MessageOut, tags=["Enrollment"])
 def enroll(request, id: int):
     if not request.user or not getattr(request.user, "id", None):
         raise HttpError(401, "Silakan login terlebih dahulu")
@@ -392,7 +506,7 @@ def enroll(request, id: int):
     return {"message": "Berhasil enroll course"}
 
 
-@apiv1.post("/enrollments/{id}/progress/", auth=apiAuth, response=ProgressOut)
+@apiv1.post("/enrollments/{id}/progress/", auth=apiAuth, response=ProgressOut, tags=["Enrollment"])
 def mark_progress(request, id: int, data: ProgressIn):
     enrollment = CourseMember.objects.filter(
         id=id,
@@ -451,7 +565,7 @@ def mark_progress(request, id: int, data: ProgressIn):
 
 # ================= COMMENT =================
 
-@apiv1.post("/comments/", auth=apiAuth)
+@apiv1.post("/comments/", auth=apiAuth, tags=["Comments"])
 def postComment(request, data: CommentIn):
     content = CourseContent.objects.filter(id=data.content_id).first()
 
@@ -471,7 +585,7 @@ def postComment(request, data: CommentIn):
     return {"message": "Komentar berhasil"}
 
 
-@apiv1.put("/comments/{id}", auth=apiAuth)
+@apiv1.put("/comments/{id}", auth=apiAuth, tags=["Comments"])
 def updateComment(request, id: int, data: CommentUpdate):
     comment = Comment.objects.filter(id=id).first()
 
@@ -487,7 +601,7 @@ def updateComment(request, id: int, data: CommentUpdate):
     return {"message": "Komentar diupdate"}
 
 
-@apiv1.delete("/comments/{id}", auth=apiAuth)
+@apiv1.delete("/comments/{id}", auth=apiAuth, tags=["Comments"])
 def deleteComment(request, id: int):
     comment = Comment.objects.select_related("content_id__course_id")\
         .filter(id=id).first()
@@ -522,14 +636,14 @@ def activity_by_action(request):
 
 @apiv1.get("/analytics/daily-active-users/", auth=apiAuth, tags=["Analytics"])
 def daily_active_users(request):
-    """Lampiran E: 'Aggregation query MongoDB - daily active users'."""
+    """Aggregation query MongoDB - daily active users"""
     require_role(request.user, ["admin"])
     return report_daily_active_users()
 
 
 @apiv1.get("/analytics/course-popularity/", auth=apiAuth, tags=["Analytics"])
 def course_popularity(request):
-    """Lampiran E: 'Aggregation query MongoDB - course popularity'."""
+    """Aggregation query MongoDB - course popularity"""
     require_role(request.user, ["admin"])
 
     data = report_course_popularity()
@@ -540,7 +654,7 @@ def course_popularity(request):
 
 @apiv1.get("/analytics/completion-summary/", auth=apiAuth, tags=["Analytics"])
 def completion_summary(request):
-    """Lampiran E: 'Aggregation query MongoDB - completion summary'."""
+    """Aggregation query MongoDB - completion summary"""
     require_role(request.user, ["admin"])
     return report_completion_summary()
 
@@ -548,10 +662,10 @@ def completion_summary(request):
 @apiv1.get("/analytics/course-report/", auth=apiAuth, response=List[CourseReportOut], tags=["Analytics"])
 def course_report(request):
     """
-    Lampiran E: 'Course analytics report' -- statistik popularitas, total
+    Course analytics report' -- statistik popularitas, total
     enrollment, completion rate per course. Sumber data: tabel
     CourseStatistics di PostgreSQL, yang diperbarui otomatis tiap 5 menit
-    oleh Celery Beat task `update_course_statistics` (Paket 6).
+    oleh Celery Beat task `update_course_statistics`.
     """
     require_role(request.user, ["admin", "instructor"])
 

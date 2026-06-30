@@ -91,6 +91,16 @@ class CourseContentOut(Schema):
     created_at: datetime
     updated_at: datetime
 
+    @staticmethod
+    def resolve_course_id(obj):
+        # "course_id" adalah nama relasi ForeignKey di model CourseContent
+        # (mengembalikan instance Course), bukan kolom mentah -- jadi harus
+        # diambil lewat course_id_id untuk dapat integer-nya.
+        return obj.course_id_id
+
+    @staticmethod
+    def resolve_parent_id(obj):
+        return obj.parent_id_id
 
 class Register(Schema):
     username: str
