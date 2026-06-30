@@ -181,7 +181,7 @@ Dokumentasi lengkap & interaktif ada di Swagger: `/api/v1/docs`.
 | Student ditolak (403) saat mencoba membuat course           | ![Student ditolak buat course](docs/screenshots/image.png)   |
 | Instructor berhasil membuat course "Course Testing" (201)   | ![Instructor buat course](docs/screenshots/image%20copy.png) |
 | Instructor berhasil membuat kategori baru (201)             | ![Buat kategori](docs/screenshots/image%20copy%202.png)      |
-| Course baru muncul di `GET /courses/` (publik, tanpa login) | ![List courses](docs/screenshots/image%20copy%203.png)       |
+| Course baru muncul di `GET /courses/`                       | ![List courses](docs/screenshots/image%20copy%203.png)       |
 
 ### 2. Enrollment, Progress & Certificate (Paket 6)
 
@@ -202,7 +202,7 @@ Dokumentasi lengkap & interaktif ada di Swagger: `/api/v1/docs`.
 | Admin trigger `export_course_report` → dapat `task_id`                   | ![Trigger export report](docs/screenshots/image%20copy%2013.png)     |
 | `GET /tasks/{task_id}/status/` → `status: SUCCESS`                       | ![Task status SUCCESS](docs/screenshots/image%20copy%2014.png)       |
 | Download CSV hasil export via `GET /admin/tasks/export-report/download/` | ![Download CSV](docs/screenshots/image%20copy%2015.png)              |
-| Isi CSV dibuka di spreadsheet — data course lengkap (30 baris)           | ![CSV dibuka di spreadsheet](docs/screenshots/image%20copy%2016.png) |
+| Isi CSV dibuka di spreadsheet — data course lengkap                      | ![CSV dibuka di spreadsheet](docs/screenshots/image%20copy%2016.png) |
 | Admin trigger `update_course_statistics` manual → dapat `task_id`        | ![Trigger update statistics](docs/screenshots/image%20copy%2017.png) |
 | Admin list semua user beserta role (`admin`/`instructor`/`student`)      | ![Admin list users](docs/screenshots/image%20copy%2011.png)          |
 | Admin promote student jadi instructor via `PUT /admin/users/{id}/role/`  | ![Update role](docs/screenshots/image%20copy%2012.png)               |
